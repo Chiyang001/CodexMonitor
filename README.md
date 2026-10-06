@@ -1,82 +1,138 @@
-# Codex 额度决策助手 · Electron
+<p align="center"><a href="https://github.com/Chiyang001"><img src="assets/developer.png" width="88" height="88" alt="开发者炽阳001的 Logo"></a><img src="docs/images/logo-divider.svg" width="32" height="88" alt="竖线分隔"><img src="assets/Logo-rounded.png" width="88" height="88" alt="Codex Monitor 软件 Logo"></p>
 
-Windows 桌面工具，显示本机 Codex ChatGPT 账号的真实额度，并提供健康度、今日预算、任务状态、使用时间轴和历史曲线。1.1.0 使用 Electron 构建悬浮窗、右键菜单、设置及三个独立面板，任务栏文字使用独立的 Windows 原生辅助窗口。
+<h1 align="center">Codex Monitor</h1>
 
-## 启动
+<p align="center">Codex 额度决策助手 · 看见余量，安排工作</p>
 
-- 直接双击 `dist/electron/CodexMonitor-1.1.0-Windows.exe`，无需安装 Node.js，任务栏文字功能使用 Windows 自带的 .NET Framework。
-- 也可运行 `Install.cmd`，将完整 Electron 程序安装到 `%LOCALAPPDATA%\CodexMonitor\app`，再从桌面或开始菜单手动启动。
-- 安装不添加开机自启动，也不会自动启动程序，旧版启动快捷方式会移除。
-- 安装和启动均不需要管理员权限。首次运行需允许 Windows 启动未签名的本地应用。
+<p align="center"><strong>v1.1.0</strong> · Windows x64 · 单文件便携版 · 开发者：炽阳001</p>
 
-程序常驻托盘，每 6 秒检查 Codex 桌面是否运行。Codex 启动时显示悬浮窗，退出后隐藏并关闭额度连接。再次启动程序会恢复已有悬浮窗，不创建重复实例。
+<p align="center"><a href="https://github.com/Chiyang001/CodexMonitor/releases/download/v1.1.0/CodexMonitor-1.1.0-Windows.exe"><strong>下载 EXE</strong></a> · <a href="https://github.com/Chiyang001/CodexMonitor/releases">版本发布</a> · <a href="CHANGELOG.md">更新日志</a> · <a href="https://space.bilibili.com/404891612">B 站主页</a> · <a href="https://github.com/Chiyang001?tab=repositories">GitHub 主页</a></p>
 
-## 界面
+---
 
-悬浮窗显示套餐、Codex 活动状态、实际额度周期、剩余百分比、重置倒计时与健康度。默认 290 × 218 逻辑像素，Electron 自动适配 Windows 显示缩放。
+**把额度信息放在手边。** Codex Monitor 显示本机已登录 Codex 账号的真实额度、剩余百分比和重置倒计时，还可以根据近期采样提供额度健康度、今日预算与耗尽预测。
 
-- 拖动标题或额度区域移动，拖动右下角调整大小并自动保存。
-- 点击右上角 × 暂时隐藏，单击或双击托盘图标恢复。
-- 点击额度健康度打开智能额度，右下角提供刷新和设置快捷按钮。
-- 右键悬浮窗或托盘打开自绘圆角菜单：显示悬浮窗、立即刷新、设置、智能额度、通知与提醒、历史统计、退出。
+## 界面预览
 
-设置面板提供以下选项：
+| 进度条 | 环形百分比 | 半圆仪表 |
+| :---: | :---: | :---: |
+| <img src="docs/images/dashboard-bars.png" width="240" alt="进度条仪表盘预览"> | <img src="docs/images/dashboard-rings.png" width="240" alt="环形百分比仪表盘预览"> | <img src="docs/images/dashboard-gauge.png" width="240" alt="半圆仪表盘预览"> |
 
-- **界面主题**：深海薄荷、晴空纸白、星夜紫、暖砂金、极夜冰蓝、暮色玫瑰、石墨银灰、晨雾鼠尾草、奶油蜜桃、轻柔薰衣草。悬浮窗、菜单和所有已经打开的面板同步切换。
-- **仪表盘样式**：独立于主题选择进度条、环形百分比、半圆仪表、分段刻度或数字卡片，同步应用到悬浮窗与额度概览。
-- **半透明效果**：在“设置 → 界面效果”中切换，默认关闭，开启后使用磨砂毛玻璃，关闭后悬浮窗、右键菜单和所有面板背景完全不透明，自动保存。
-- **显示位置**：任务栏额度文字支持一行或两行、自定义字号、左侧留白和深浅文字颜色。
-- **关于**：显示版本、开发者炽阳001与 Logo、B 站和 GitHub 主页，并提供检查更新入口。
-- **窗口大小**：85%、100%、125%、150%、200% 预设，100% 恢复默认尺寸。
+<details>
+<summary>查看更多仪表盘样式</summary>
 
-修改即时生效、自动保存。面板支持顶部拖动、右上角关闭和 Esc 关闭。按钮悬停、Tab 切换、进度变化、提醒开关与工作状态采用轻量动画，遵循系统减少动画偏好。所有窗口使用用户提供的 `logo.png`，保留原图并做透明圆角裁剪。
+| 分段刻度 | 数字卡片 |
+| :---: | :---: |
+| <img src="docs/images/dashboard-segments.png" width="280" alt="分段刻度仪表盘预览"> | <img src="docs/images/dashboard-numbers.png" width="280" alt="数字卡片仪表盘预览"> |
 
-## 智能额度
+</details>
 
-三个功能各自打开独立面板：
+预览使用演示数据。实际额度与周期以你的账号接口返回为准。
 
-**智能额度**包括额度概览、今日预算、当前任务。
+## 快速开始
 
-- 健康度将近期消耗速度与剩余周期预算比较，不只依赖固定余量阈值。预测至少需要 15 分钟同周期采样，采用最近 24 小时或短周期长度中的较短观测范围。
-- 今日预算以今日首次采样的余额为起点，扣除今日已观测消耗，避免重复扣减。优先使用每周额度，缺失时使用每日或更长周期，提供节省、均衡、激进三档参考。
-- 本地会话日志提供最近活动任务的工作 / 等待输入 / 空闲 / 离线 / 疑似卡住状态、时长、可获得的模型与 Token 增量，以及采样期间额度变化。
+1. 本机安装 Codex，并登录 ChatGPT 账号。
+2. [下载 CodexMonitor-1.1.0-Windows.exe](https://github.com/Chiyang001/CodexMonitor/releases/download/v1.1.0/CodexMonitor-1.1.0-Windows.exe)。
+3. 双击 EXE 运行，在悬浮窗或托盘图标上右键打开菜单。
 
-**通知与提醒**使用独立开关控制重置前 30 分钟、重置已确认、低于 20%、周额度消耗过快提醒。默认开启重置确认与周消耗速度提醒。本次运行期间，同周期同类提醒只发送一次，Windows 通知偏好可能影响显示。
+便携版约 **96 MB**，自带 Electron 运行时，无需安装 Node.js。程序未进行代码签名，首次运行可能出现 Windows 提示。任务栏文字功能使用 Windows 自带的 .NET Framework。
 
-**历史统计**包括未来 24 小时额度时间轴和最近 24 小时历史曲线。曲线按实际采样时间绘制，重置周期变化处断开。时间轴只使用接口提供的重置点和有历史依据的耗尽预测，不编造后续滚动窗口的重置时刻。
+程序手动启动，不添加开机自启动。Codex 启动后显示悬浮窗，退出后隐藏并关闭额度连接。再次运行会恢复已有实例。
 
-历史不足、数据超过 75 秒未更新、额度修正或重置时间已到时，暂停相应预测。重置必须经官方接口重新确认，不假定已恢复 100%。未观测时段消耗未知，任务额度变化可能包含其他客户端或并发任务，短周期额度仍可能先耗尽。十分钟无日志事件只提示疑似卡住，等待输入只识别明确的输入工具调用。预测不保证大型任务一定完成。
+## 能做什么
 
-## 数据与兼容
+| 功能 | 说明 |
+| --- | --- |
+| 额度监控 | 显示套餐、实际额度周期、剩余百分比、重置倒计时及 Codex 活动状态。 |
+| 智能额度 | 提供额度健康度、今日安全预算、耗尽预测和使用建议。 |
+| 当前任务 | 查看最近活动任务的时长、模型、Token 增量与观测期间额度变化。 |
+| 通知提醒 | 分别设置重置前 30 分钟、重置确认、低额度与周消耗偏快提醒。 |
+| 历史统计 | 查看未来 24 小时额度时间轴和最近 24 小时采样曲线。 |
+| 任务栏文字 | 在任务栏直接显示 5h 和每周剩余额度，支持字号、布局及位置调整。 |
 
-通过官方本机 `codex app-server --listen stdio://` 的 `initialize`、`account/read`、`account/rateLimits/read` 接口读取数据。优先选择 `rateLimitsByLimitId.codex`，没有分组字段时读取 `rateLimits`。按 `windowDurationMins` 识别实际周期，剩余百分比为 `100 - usedPercent`，套餐优先采用额度接口的 `planType`。
+## 按你的习惯设置
 
-程序自动发现 `%LOCALAPPDATA%\OpenAI\Codex\bin` 中的 Codex CLI，也支持 PATH 和 `CODEX_MONITOR_CODEX_PATH`。识别标准 Windows Store Codex 与常规安装目录。支持 `CODEX_HOME`，认证文件变更后清除旧快照并重新连接。API Key 登录没有相应的 ChatGPT 套餐额度，缺失额度不会显示为无限或 100%。
+所有设置即时生效并自动保存，主题与仪表盘样式独立选择。
 
-不直接读取凭据内容，不保存账号明文、令牌、提示词、对话或服务端诊断日志，也不创建任务或发起模型请求。渲染进程禁用 Node.js，通过隔离的 preload 和限定 IPC 操作主进程，只加载本机界面文件。
+| 设置入口 | 可调整内容 |
+| --- | --- |
+| 界面主题 | 十套配色，悬浮窗、菜单与面板同步切换。 |
+| 仪表盘样式 | 进度条、环形百分比、半圆仪表、分段刻度、数字卡片。 |
+| 界面效果 | 半透明效果默认关闭，开启后使用磨砂毛玻璃。 |
+| 窗口大小 | 85%、100%、125%、150%、200% 预设，也可拖动右下角调整。 |
+| 显示位置 | 开启任务栏额度文字，选择一行或两行，调整字号、左侧留白及文字颜色。 |
+| 关于 | 版本、开发者 Logo 与主页链接，以及检查更新入口。 |
 
-`%LOCALAPPDATA%\CodexMonitor\settings.json` 保存偏好，`usage-<账号标识哈希>.json` 保存最多八天的时间、百分比、周期、重置点数值采样。1.1.0 自动读取旧版设置及 C# 历史格式，旧默认窗口尺寸升级到新默认尺寸，自定义尺寸在新最小尺寸内保留。接口没有账号标识时按认证文件修改标记隔离，刷新认证可能需要重新积累历史。
+**十套主题：** 深海薄荷、晴空纸白、星夜紫、暖砂金、极夜冰蓝、暮色玫瑰、石墨银灰、晨雾鼠尾草、奶油蜜桃、轻柔薰衣草。
 
-## 开发与验证
+### 任务栏文字
 
-开发构建需要 Node.js 22 或更新版本，发布包自带 Electron 运行时。
+在 **设置 → 显示位置** 开启“在任务栏显示额度文字”。支持主屏幕水平任务栏，任务栏文字独立于悬浮窗。
+
+- **布局：** 默认两行，也可选择一行并排显示。
+- **字号：** 10–24 像素，默认 12。两行布局高度不足时缩小显示字号以避免裁切，保留用户设置。
+- **位置：** 默认左侧留白 340 逻辑像素，可调整以避开 Traffic Monitor、天气及应用图标。
+- **交互：** 右键文字打开菜单，双击打开设置。深色任务栏开关控制文字颜色。
+
+### 常用操作
+
+| 操作 | 效果 |
+| --- | --- |
+| 拖动标题或额度区域 | 移动悬浮窗。 |
+| 点击右上角 × | 暂时隐藏悬浮窗。 |
+| 点击托盘图标 | 恢复悬浮窗。 |
+| 点击额度健康度 | 打开智能额度面板。 |
+| 右键悬浮窗或托盘 | 打开快捷菜单。 |
+| 按 Esc | 关闭当前面板。 |
+
+## 数据与隐私
+
+通过官方本机 `codex app-server` 读取额度，不发起模型请求。不保存账号明文、令牌、提示词或对话内容，历史数据仅保存在本机。
+
+设置保存在 `%LOCALAPPDATA%\CodexMonitor\settings.json`。数值历史按账号标识哈希隔离，最多保留八天。1.1.0 兼容旧版设置与 C# 历史格式。
+
+> 预算与耗尽预测基于近期观测速率，不保证任务一定完成。历史不足、数据过期、额度修正或等待重置确认时会暂停相应预测。任务额度变化可能包含其他客户端或并发任务的消耗。
+
+<details>
+<summary>查看额度来源与兼容性说明</summary>
+
+- 使用 `initialize`、`account/read`、`account/rateLimits/read` 接口，优先读取 `rateLimitsByLimitId.codex`，没有分组字段时读取 `rateLimits`。
+- 按 `windowDurationMins` 识别实际周期，剩余额度为 `100 - usedPercent`。缺失额度不会显示为无限或 100%。
+- 自动发现 Codex CLI，也支持 PATH、`CODEX_MONITOR_CODEX_PATH` 和 `CODEX_HOME`。认证文件变更后清除旧快照并重新连接。
+- API Key 登录可能没有对应的 ChatGPT 套餐额度。接口没有账号标识时按认证文件修改标记隔离采样，刷新认证可能需要重新积累历史。
+- 预测至少需要 15 分钟同周期采样，数据超过 75 秒未更新时暂停预测。重置必须经官方接口确认，不假定已经恢复。
+- 同周期同类通知在本次运行期间只发送一次，Windows 通知设置可能影响显示。
+
+</details>
+
+## 开发与构建
+
+需要 Node.js 22 或更新版本。
 
 ```powershell
 npm ci
 npm start
-npm test
-npm run test:ui
-.\build.ps1
 ```
 
-`npm test` 验证额度解析、预测与预算边界、旧设置 / 历史迁移、账号隔离、任务归因限制和 RPC 通讯。`npm run test:ui` 在实际 Electron 窗口中使用明确的测试数据验证所有界面、十套主题、Tab、尺寸和提醒交互，并在 `artifacts` 生成预览，不会调用模型或修改正式用户偏好。只读真实账号验证：`node_modules\.bin\electron.cmd . --verify-live`。
+| 命令 | 用途 |
+| --- | --- |
+| `npm test` | 核心逻辑、迁移、RPC 与任务栏数据检查。 |
+| `npm run test:ui` | 实际 Electron 窗口中的主题、设置、任务栏文字及链接检查。 |
+| `npm run pack` | 生成或更新 `dist/electron/win-unpacked`。 |
+| `npm run dist` | 生成 Windows 单文件便携 EXE。 |
+| `.\build.ps1` | 运行测试并打包发布版本。 |
 
-`npm run pack` 生成 `dist/electron/win-unpacked`，`npm run dist` 另外生成约 100 MB 的 Windows 单文件便携包。Electron 版包体及运行内存高于原生版。`scripts/assets.cjs` 用原图生成透明圆角 PNG 与 16–256 像素的九尺寸 ICO。原 C# 实现保留在 `legacy/native` 作为历史参考，不参与当前构建。
+界面检查使用演示数据，预览输出到 `artifacts`，不修改正式用户偏好。原 C# 实现归档在 `legacy/native`，不参与当前构建。
 
-## 卸载
+<details>
+<summary>目录安装与卸载</summary>
 
-先从菜单退出，再运行 `%LOCALAPPDATA%\CodexMonitor\Uninstall.ps1`。卸载删除程序与快捷方式，保留设置和数值历史。需要清除历史时，退出后删除安装目录中的 `usage-*.json`。
+开发构建后可运行 `Install.cmd`，将完整程序安装到 `%LOCALAPPDATA%\CodexMonitor\app`，并创建桌面和开始菜单快捷方式。安装不添加开机自启动，也不会自动运行程序。
 
-任务栏文字：在“设置 → 显示位置”中开启“在任务栏显示额度文字”，直接在主屏幕水平任务栏中以两行文字显示 5h 与每周剩余百分比。默认关闭，左侧留白默认 340 逻辑像素，可调整以避开 Traffic Monitor、天气与图标。右键文字打开菜单，双击打开设置，深色任务栏开关控制文字颜色。首次开启使用系统自带 .NET 编译原生辅助窗口，无需安装依赖，退出时自动关闭。
+先从菜单退出，再运行 `%LOCALAPPDATA%\CodexMonitor\Uninstall.ps1` 卸载。设置与数值历史保留，需要清除历史时可在退出后删除 `usage-*.json`。
 
-任务栏文字大小：在“设置 → 显示位置”中调整字号，范围 10–24 像素，默认 12。字号即时生效并自动保存，显示宽度随字号调整。可选择一行或两行显示，默认两行。两行布局在任务栏高度不足时缩小显示字号以避免裁切，保留用户设置的字号。
+</details>
+
+---
+
+<p align="center">开发者 <strong>炽阳001</strong> · <a href="https://space.bilibili.com/404891612">B 站</a> · <a href="https://github.com/Chiyang001?tab=repositories">GitHub</a> · <a href="https://github.com/Chiyang001/CodexMonitor/issues">反馈问题</a></p>
