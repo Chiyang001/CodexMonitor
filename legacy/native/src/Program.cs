@@ -18,8 +18,12 @@ namespace CodexMonitor
         {
             if (args.Length > 1 && args[0] == "--export-icon")
             {
-                using (var icon = MonitorForm.MakeIcon(64))
-                using (var output = File.Create(args[1])) icon.Save(output);
+                AppLogo.ExportIcon(args[1]);
+                return;
+            }
+            if (args.Length > 1 && args[0] == "--export-logo")
+            {
+                using (var logo = AppLogo.Render(512)) logo.Save(args[1], System.Drawing.Imaging.ImageFormat.Png);
                 return;
             }
             Application.EnableVisualStyles();
@@ -51,8 +55,9 @@ namespace CodexMonitor
         public bool Pinned = true;
         public double Opacity = 0.97;
         public int Width = WindowLayout.DefaultWidth;
-        public int Height = WindowLayout.DefaultHeight;
+        public int Height = WindowLayout.DefaultHeight + 30;
         public string Theme = "mint";
+        public bool ResetAlert = true, BeforeResetAlert = false, LowAlert = false, PaceAlert = true;
     }
     public sealed class MonitorForm : Form
     {
@@ -63,7 +68,6 @@ namespace CodexMonitor
         Color background { get { return theme.Background; } }
         Color foreground { get { return theme.Text; } }
         Color muted { get { return theme.Muted; } }
-        readonly List<ToolStripMenuItem> themeItems = new List<ToolStripMenuItem>();
         readonly System.Windows.Forms.Timer clock = new System.Windows.Forms.Timer { Interval = 1000 };
         readonly System.Windows.Forms.Timer watch = new System.Windows.Forms.Timer { Interval = 4000 };
         readonly System.Windows.Forms.Timer poll = new System.Windows.Forms.Timer { Interval = 30000 };
@@ -86,6 +90,14 @@ namespace CodexMonitor
         int hovered = -1;
         bool pointerInside;
         bool layoutReady;
+        readonly UsageHistory history = new UsageHistory();
+        TaskActivity activity = new TaskActivity();
+        readonly HashSet<string> alerted = new HashSet<string>();
+        string historyIdentity;
+        DecisionForm decision;
+        DecisionForm notificationPanel, historyPanel;
+        AppearanceForm appearance;
+        bool scanning;
 
         public MonitorForm(bool watchOnly, string captureOutput)
         {
@@ -119,50 +131,36 @@ namespace CodexMonitor
             tray.DoubleClick += delegate { Show(); };
             menu.Items.Add("显示悬浮窗", null, delegate { Show(); });
             menu.Items.Add("立即刷新", null, async delegate { await RefreshAsync(); });
-            var themes = new ToolStripMenuItem("界面主题");
-            foreach (var option in MonitorTheme.All)
-            {
-                string id = option.Id;
-                var item = new ToolStripMenuItem(option.Name) { Tag = id, Checked = theme.Id == id };
-                item.Click += delegate { SetTheme(id); SavePreferences(); };
-                themeItems.Add(item); themes.DropDownItems.Add(item);
-            }
-            menu.Items.Add(themes);
-            SetTheme(theme.Id);
-            var pin = new ToolStripMenuItem("始终置顶") { Checked = TopMost, CheckOnClick = true };
-            pin.CheckedChanged += delegate { TopMost = preferences.Pinned = pin.Checked; SavePreferences(); Invalidate(); };
-            menu.Items.Add(pin);
-            var opacity = new ToolStripMenuItem("透明度");
-            foreach (int percent in new[] { 100, 90, 80, 70 })
-            {
-                int value = percent;
-                opacity.DropDownItems.Add(value + "%", null, delegate { Opacity = preferences.Opacity = value / 100.0; SavePreferences(); });
-            }
-            menu.Items.Add(opacity);
-            var sizes = new ToolStripMenuItem("窗口大小");
-            foreach (int percent in new[] { 85, 100, 125, 150, 200 })
-            {
-                int value = percent;
-                sizes.DropDownItems.Add(value == 100 ? "100% · 默认" : value + "%", null, delegate {
-                    Size = new Size((int)(WindowLayout.DefaultWidth * scale * value / 100f), (int)(WindowLayout.DefaultHeight * scale * value / 100f));
-                    KeepOnScreen(); SavePreferences();
-                });
-            }
-            menu.Items.Add(sizes);
-            menu.Items.Add("重置悬浮窗位置", null, delegate { var bounds = Screen.PrimaryScreen.WorkingArea; Location = new Point(bounds.Right - Width - 24, bounds.Top + 80); SavePreferences(); });
+            menu.Items.Add("设置", null, delegate { OpenAppearance(); });
             menu.Items.Add(new ToolStripSeparator());
-            menu.Items.Add("打开说明", null, delegate { string readme = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "README.md"); if (File.Exists(readme)) Process.Start(new ProcessStartInfo(readme) { UseShellExecute = true }); });
+            menu.Items.Add("智能额度", null, delegate { OpenDecision(); });
+            menu.Items.Add("通知与提醒", null, delegate { OpenPanel("通知与提醒"); });
+            menu.Items.Add("历史统计", null, delegate { OpenPanel("历史统计"); });
+            menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("退出", null, delegate { exiting = true; Close(); });
+            menu.ShowImageMargin = false;
+            menu.Padding = new Padding(7);
+            menu.Font = new Font("Microsoft YaHei UI", 9.5f);
+            foreach (ToolStripItem item in menu.Items)
+                if (!(item is ToolStripSeparator)) { item.AutoSize = false; item.Size = new Size(188, 34); }
+            menu.Opened += delegate {
+                Region old = menu.Region;
+                using (var path = PanelStyle.Round(new RectangleF(0, 0, menu.Width, menu.Height), 12)) menu.Region = new Region(path);
+                if (old != null) old.Dispose();
+            };
+            SetTheme(theme.Id);
             ContextMenuStrip = menu;
             showSignal = capturePath == null ? new EventWaitHandle(false, EventResetMode.AutoReset, @"Local\CodexQuotaMonitor.Show") : null;
             clock.Tick += async delegate
             {
                 if (showSignal != null && showSignal.WaitOne(0)) { Show(); }
                 Invalidate();
+                if (decision != null && !decision.IsDisposed) decision.UpdateContent(BuildDecision());
+                if (historyPanel != null && !historyPanel.IsDisposed) historyPanel.UpdateContent(BuildDecision());
                 bool expired = snapshot != null && snapshot.HasExpiredWindow(DateTimeOffset.Now);
                 if (running && expired && (DateTimeOffset.Now - lastAttempt).TotalSeconds >= 10) await RefreshAsync();
             };
-            watch.Tick += async delegate { await CheckDesktopAsync(); };
+            watch.Tick += async delegate { await CheckDesktopAsync(); await ScanActivityAsync(); };
             poll.Tick += async delegate { if (running) await RefreshAsync(); };
             Shown += async delegate
             {
@@ -186,16 +184,195 @@ namespace CodexMonitor
                 else { ReleaseCapture(); SendMessage(Handle, WM_NCLBUTTONDOWN, new IntPtr(2), IntPtr.Zero); KeepOnScreen(); SavePreferences(); }
             };
             ResizeEnd += delegate { KeepOnScreen(); SavePreferences(); };
+            MouseDoubleClick += delegate(object sender, MouseEventArgs e) { if (e.Button == MouseButtons.Left) OpenDecision(); };
+        }
+        void OpenAppearance()
+        {
+            if (appearance == null || appearance.IsDisposed)
+                appearance = new AppearanceForm(preferences,
+                    id => { SetTheme(id); SavePreferences(); },
+                    value => { Opacity = preferences.Opacity = value; SavePreferences(); },
+                    percent => {
+                        Size = new Size((int)Math.Round(WindowLayout.DefaultWidth * scale * percent / 100f), (int)Math.Round((WindowLayout.DefaultHeight + 30) * scale * percent / 100f));
+                        KeepOnScreen(); SavePreferences();
+                    });
+            appearance.Show(); appearance.Activate();
+        }
+        void OpenPanel(string kind)
+        {
+            DecisionForm panel = kind == "通知与提醒" ? notificationPanel : historyPanel;
+            if (panel == null || panel.IsDisposed)
+            {
+                panel = new DecisionForm(kind, preferences, SavePreferences);
+                if (kind == "通知与提醒") notificationPanel = panel; else historyPanel = panel;
+            }
+            panel.UpdateContent(BuildDecision()); panel.Show(); panel.Activate();
+        }
+        async Task ScanActivityAsync()
+        {
+            if (scanning || capturePath != null) return;
+            scanning = true;
+            try
+            {
+                var candidate = activity.Fork(); bool desktop = running; string identity = historyIdentity;
+                await Task.Run(() => candidate.Scan(desktop, DateTimeOffset.Now));
+                if (exiting || desktop != running || identity != historyIdentity) return;
+                activity = candidate;
+                if (snapshot != null) activity.Observe(snapshot);
+            }
+            finally { scanning = false; }
+        }
+        void OpenDecision()
+        {
+            if (decision == null || decision.IsDisposed) decision = new DecisionForm();
+            decision.UpdateContent(BuildDecision()); decision.Show(); decision.Activate();
+        }
+        bool Fresh { get { return snapshot != null && (DateTimeOffset.Now - snapshot.Updated).TotalSeconds < 75; } }
+        QuotaAdvice Advice(QuotaWindow window) { return Fresh ? history.Analyze(window, DateTimeOffset.Now) : new QuotaAdvice { Explanation = "额度数据未更新，等待重新连接" }; }
+        QuotaAdvice OverallHealth()
+        {
+            if (snapshot == null || snapshot.Windows.Count == 0) return new QuotaAdvice();
+            QuotaAdvice unknown = null, healthy = null;
+            foreach (var window in snapshot.Windows)
+            {
+                var advice = Advice(window);
+                if (advice.Health == "已耗尽" || advice.Fast) return advice;
+                if (advice.Health == "数据不足") unknown = advice; else healthy = advice;
+            }
+            return unknown ?? healthy ?? new QuotaAdvice();
+        }
+        string BuildDecision()
+        {
+            var text = new System.Text.StringBuilder();
+            var now = DateTimeOffset.Now;
+            text.AppendLine("Codex 额度决策助手").AppendLine();
+            if (snapshot == null) return text.AppendLine(status).ToString();
+            if (!Fresh) text.AppendLine("额度数据已过期；以下百分比为上次读取值。").AppendLine();
+            foreach (var window in snapshot.Windows)
+            {
+                var advice = Advice(window);
+                text.AppendLine(window.Label + " · 剩余 " + (window.Expired(now) ? "未知" : Percent(window)) + " · " + QuotaSnapshot.Countdown(window, now));
+                text.AppendLine("额度健康：" + advice.Health + "；" + advice.Explanation);
+                text.AppendLine(advice.DailyRate.HasValue ? "近期速度：" + advice.DailyRate.Value.ToString("0.0") + "% / 天；" + (advice.Exhaustion.HasValue ? "预计耗尽：" + advice.Exhaustion.Value.ToLocalTime().ToString("MM-dd HH:mm") + (advice.Fast ? "（早于重置）" : "（本周期重置更早）") : "近期无消耗") : "耗尽预测：数据不足");
+                text.AppendLine();
+            }
+            var budgetWindow = snapshot.Weekly ?? snapshot.Windows.Find(w => w.Minutes >= 1440);
+            var budget = Advice(budgetWindow);
+            {
+                text.AppendLine("今日安全预算（" + (budgetWindow == null ? "无日 / 周额度" : budgetWindow.Label) + "）");
+                if (budget.Safe.HasValue)
+                {
+                    text.AppendLine("今日建议预算 " + budget.Budget.Value.ToString("0.0") + "% · 今日已观测消耗 " + budget.TodayUsed.Value.ToString("0.0") + "%");
+                    text.AppendLine("今天还可使用约 " + budget.Safe.Value.ToString("0.0") + "%");
+                    text.AppendLine("节省 " + (budget.Safe.Value * 0.6).ToString("0.0") + "% / 均衡 " + budget.Safe.Value.ToString("0.0") + "% / 激进 " + Math.Min(budgetWindow.Remaining, budget.Safe.Value * 1.5).ToString("0.0") + "%");
+                }
+                else text.AppendLine("等待今天同周期的两次有效采样");
+                text.AppendLine("预算从今日首次采样起计算；未观测时段的消耗未知，短周期额度仍可能先耗尽。").AppendLine();
+            }
+            {
+                text.AppendLine("Codex · " + activity.State + "（本地日志推测）");
+                if (activity.Started.HasValue)
+                {
+                    text.AppendLine("最近活动任务 " + (activity.Id ?? "未知") + " · " + Math.Max(0, ((activity.Finished ?? now) - activity.Started.Value).TotalMinutes).ToString("0") + " 分钟");
+                    text.AppendLine("模型 " + (activity.Model ?? "未知") + " · Tokens " + (activity.Tokens.HasValue ? activity.Tokens.Value.ToString("N0") : "数据不足"));
+                    text.AppendLine("采样期间额度变化：5h " + Change(activity.FiveChange) + " / Weekly " + Change(activity.WeekChange));
+                }
+                if (activity.ReadError != null) text.AppendLine(activity.ReadError);
+                text.AppendLine("只跟踪最近活动会话；额度变化可能包含其他任务 / 客户端。等待输入仅识别明确的输入工具调用；10 分钟无事件仅提示疑似卡住。").AppendLine();
+            }
+            {
+                text.AppendLine("未来 24 小时额度时间轴");
+                var events = new SortedDictionary<long, List<string>>();
+                foreach (var window in snapshot.Windows)
+                {
+                    if (!window.Reset.HasValue || window.Expired(now)) continue;
+                    long reset = window.Reset.Value;
+                    if (reset <= now.AddHours(24).ToUnixSeconds())
+                    {
+                        if (!events.ContainsKey(reset)) events[reset] = new List<string>();
+                        events[reset].Add(window.Label + " 预计重置（以接口重新读取为准）");
+                    }
+                    var advice = Advice(window);
+                    if (advice.Fast && advice.Exhaustion.HasValue && advice.Exhaustion <= now.AddHours(24))
+                    {
+                        long time = advice.Exhaustion.Value.ToUnixSeconds();
+                        if (!events.ContainsKey(time)) events[time] = new List<string>();
+                        events[time].Add(window.Label + " 按近期速度预计耗尽");
+                    }
+                }
+                foreach (var item in events) foreach (var line in item.Value) text.AppendLine(Unix(item.Key).ToLocalTime().ToString("MM-dd HH:mm") + "  " + line);
+                if (events.Count == 0) text.AppendLine("未来 24 小时没有已知重置或耗尽点");
+                text.AppendLine(Recommendation()).AppendLine();
+            }
+            text.AppendLine("历史采样（最近 24 小时）");
+            foreach (var window in snapshot.Windows)
+            {
+                var points = history.Points.FindAll(p => p.Minutes == window.Minutes && p.Time >= now.AddHours(-24).ToUnixSeconds());
+                text.AppendLine(window.Label + "：" + points.Count + " 个采样");
+                int stride = Math.Max(1, (int)Math.Ceiling(points.Count / 12.0));
+                for (int i = 0; i < points.Count; i += stride) text.AppendLine("  " + Unix(points[i].Time).ToLocalTime().ToString("MM-dd HH:mm") + "  剩余 " + (100 - points[i].Used).ToString("0.0") + "%");
+            }
+            if (history.SaveFailed) text.AppendLine("历史保存失败，当前仅使用内存采样。");
+            text.AppendLine().AppendLine("预测基于近期观测速度，不保证后续消耗相同；不推算已恢复额度。");
+            return text.ToString();
+        }
+        static DateTimeOffset Unix(long seconds) { return new DateTimeOffset(1970, 1, 1, 0, 0, 0, TimeSpan.Zero).AddSeconds(seconds); }
+        static string Change(double? value) { return value.HasValue ? "-" + value.Value.ToString("0.0") + "%" : "未知"; }
+        string Recommendation()
+        {
+            if (!Fresh || snapshot.Windows.Count == 0) return "推荐窗口：等待有效额度数据";
+            foreach (var w in snapshot.Windows) if (w.Expired(DateTimeOffset.Now)) return "推荐窗口：等待重置确认后再判断";
+            var limiting = snapshot.Windows.Find(w => w.Remaining <= 20 || Advice(w).Fast);
+            if (limiting != null) return limiting.Reset.HasValue ? "高强度任务建议等到 " + Unix(limiting.Reset.Value).ToLocalTime().ToString("MM-dd HH:mm") + " 后重新检查所有额度" : "建议节省使用，重置时间未知";
+            foreach (var w in snapshot.Windows) if (!Advice(w).DailyRate.HasValue) return "额度尚有余量；历史不足，暂不推荐高强度窗口";
+            return "当前额度与近期速度允许继续使用；大型任务仍需留出余量";
+        }
+        void NotifyOnce(string key, string message)
+        {
+            if (capturePath != null || !alerted.Add(key)) return;
+            tray.ShowBalloonTip(6000, "Codex 额度决策助手", message, ToolTipIcon.Info);
+        }
+        void CheckAlerts(QuotaSnapshot previous)
+        {
+            var now = DateTimeOffset.Now;
+            foreach (var window in snapshot.Windows)
+            {
+                string key = window.Minutes + ":" + window.Reset;
+                if (window.Expired(now)) continue;
+                var old = previous == null ? null : previous.Windows.Find(w => w.Minutes == window.Minutes);
+                if (preferences.ResetAlert && old != null && old.Reset.HasValue && window.Reset.HasValue && window.Reset > old.Reset && old.Reset <= now.ToUnixSeconds()) NotifyOnce("reset:" + key, window.Label + " 重置已确认，当前剩余 " + Percent(window) + "。" + Recommendation());
+                if (preferences.BeforeResetAlert && window.Reset.HasValue && window.Reset.Value - now.ToUnixSeconds() <= 1800) NotifyOnce("before:" + key, window.Label + " 将在 30 分钟内重置");
+                if (preferences.LowAlert && window.Remaining <= 20) NotifyOnce("low:" + key, window.Label + " 剩余 " + Percent(window));
+                if (preferences.PaceAlert && window.Minutes == 10080 && Advice(window).Fast) NotifyOnce("pace:" + key, "周额度消耗偏快，按近期速度可能在重置前耗尽");
+            }
         }
         protected override bool ShowWithoutActivation { get { return true; } }
         public void SetTheme(string id)
         {
             theme = MonitorTheme.Find(id); preferences.Theme = theme.Id;
+            PanelStyle.SetTheme(theme);
             BackColor = background; ForeColor = foreground;
-            menu.Renderer = new ToolStripProfessionalRenderer(new ThemeMenuColors(theme));
-            menu.BackColor = theme.Card; menu.ForeColor = foreground;
-            foreach (var item in themeItems) item.Checked = (string)item.Tag == theme.Id;
+            menu.Renderer = new RoundedMenuRenderer(theme);
+            ApplyMenuTheme(menu, menu.Renderer);
+            if (appearance != null && !appearance.IsDisposed) appearance.ApplyTheme();
+            if (decision != null && !decision.IsDisposed) decision.ApplyTheme();
+            if (notificationPanel != null && !notificationPanel.IsDisposed) notificationPanel.ApplyTheme();
+            if (historyPanel != null && !historyPanel.IsDisposed) historyPanel.ApplyTheme();
             Invalidate();
+        }
+        void ApplyMenuTheme(ToolStrip strip, ToolStripRenderer renderer)
+        {
+            strip.BackColor = theme.Card;
+            strip.ForeColor = foreground;
+            strip.Renderer = renderer;
+            foreach (ToolStripItem item in strip.Items)
+            {
+                item.BackColor = theme.Card;
+                item.ForeColor = foreground;
+                var parent = item as ToolStripDropDownItem;
+                if (parent != null && parent.HasDropDownItems)
+                    ApplyMenuTheme(parent.DropDown, renderer);
+            }
         }
         sealed class ThemeMenuColors : ProfessionalColorTable
         {
@@ -209,6 +386,27 @@ namespace CodexMonitor
             public override Color MenuItemSelected { get { return theme.Track; } }
             public override Color MenuItemBorder { get { return theme.Border; } }
             public override Color CheckBackground { get { return theme.Track; } }
+        }
+        sealed class RoundedMenuRenderer : ToolStripProfessionalRenderer
+        {
+            readonly MonitorTheme theme;
+            public RoundedMenuRenderer(MonitorTheme value) : base(new ThemeMenuColors(value)) { theme = value; RoundedEdges = false; }
+            protected override void OnRenderMenuItemBackground(ToolStripItemRenderEventArgs e)
+            {
+                e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                using (var path = PanelStyle.Round(new RectangleF(1, 1, e.Item.Width - 2, e.Item.Height - 2), 7))
+                using (var brush = new SolidBrush(e.Item.Selected ? theme.Track : theme.Card)) e.Graphics.FillPath(brush, path);
+            }
+            protected override void OnRenderItemText(ToolStripItemTextRenderEventArgs e)
+            {
+                e.TextColor = theme.Text; base.OnRenderItemText(e);
+            }
+            protected override void OnRenderToolStripBorder(ToolStripRenderEventArgs e)
+            {
+                e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                using (var path = PanelStyle.Round(new RectangleF(.5f, .5f, e.ToolStrip.Width - 1, e.ToolStrip.Height - 1), 12))
+                using (var pen = new Pen(theme.Border)) e.Graphics.DrawPath(pen, path);
+            }
         }
         protected override CreateParams CreateParams { get { var cp = base.CreateParams; cp.ExStyle |= 0x08000080; return cp; } }
         protected override void WndProc(ref Message message)
@@ -288,9 +486,20 @@ namespace CodexMonitor
                 var result = await client.RequestAsync("account/rateLimits/read", null);
                 if (!running || exiting) return;
                 if (stamp != CodexDiscovery.AuthStamp()) { snapshot = null; StopClient(); status = "账号已切换，正在更新…"; return; }
+                string identity = Json.String(account, "id") ?? Json.String(account, "email");
+                // If the server omits account identity, isolate by authentication-file stamp.
+                identity = identity ?? stamp;
+                if (historyIdentity != identity)
+                {
+                    historyIdentity = identity; history.Open(Path.GetDirectoryName(settingsPath), identity); alerted.Clear();
+                    activity.ResetQuotaBaseline();
+                    snapshot = null;
+                }
+                var previous = snapshot;
                 snapshot = QuotaSnapshot.Parse(result, Json.String(account, "planType"));
+                if (capturePath == null) { history.Record(snapshot); activity.Observe(snapshot); CheckAlerts(previous); }
                 status = "";
-                tooltip.SetToolTip(this, "拖动空白区域移动；拖动边缘或右下角调整大小。\n右键选择大小、置顶和透明度。");
+                tooltip.SetToolTip(this, "双击展开额度决策面板。\n" + Recommendation() + "\n拖动移动；右键设置。");
                 tray.Text = snapshot.TrayText;
                 if (capturePath != null)
                 {
@@ -326,9 +535,9 @@ namespace CodexMonitor
             using (var outline = Rounded(new RectangleF(0.5f, 0.5f, width - 1, height - 1), 11.5f))
             using (var pen = new Pen(theme.Border, 1 / contentScale))
             { g.FillPath(fill, outline); g.DrawPath(pen, outline); }
-            DrawLogo(g, new RectangleF(14, 10, 13, 13), theme.Accent);
+            AppLogo.Draw(g, new RectangleF(13, 8, 18, 18));
             DrawText(g, "Codex", 34, 7, 78, 20, 8.2f, foreground, true);
-            if (snapshot != null) DrawText(g, snapshot.PlanLabel, 83, 8, width - 122, 19, 6.5f, muted, false);
+            if (snapshot != null) DrawText(g, snapshot.PlanLabel, 83, 8, Math.Max(25, width - 150), 19, 6.5f, muted, false);
             for (int i = 1; i < 2; i++)
             {
                 float x = width - 57 + 23 * i;
@@ -336,7 +545,8 @@ namespace CodexMonitor
             }
             if (pointerInside) using (var pen = new Pen(muted, 0.9f)) { g.DrawLine(pen, width - 27, 13, width - 20, 20); g.DrawLine(pen, width - 20, 13, width - 27, 20); }
             // Keep each quota and its bar grouped when the user chooses a tall aspect ratio.
-            float firstRow = 34 + Math.Max(0, height - WindowLayout.DefaultHeight) / 2;
+            bool showHealth = height >= 144;
+            float firstRow = 34 + Math.Max(0, height - WindowLayout.DefaultHeight - (showHealth ? 24 : 0)) / 2;
             const float rowHeight = 40;
             var windows = snapshot == null ? new List<QuotaWindow>() : snapshot.Windows;
             if (windows.Count == 0)
@@ -355,6 +565,12 @@ namespace CodexMonitor
                 for (int i = 0; i < windows.Count; i++)
                     DrawWindow(g, windows[i].Label, windows[i], firstRow + (windows.Count == 1 ? 18 : i * rowHeight), width, rowHeight);
             }
+            if (showHealth)
+            {
+                var advice = OverallHealth();
+                DrawText(g, "额度健康：" + advice.Health, 16, height - 27, width - 32, 19, 7.4f, advice.Fast ? Color.FromArgb(210, 139, 74) : theme.Accent, true);
+            }
+            if (!pointerInside) DrawText(g, activity.State, width - 62, 8, 48, 19, 6.5f, muted, false, true);
             if (pointerInside) using (var pen = new Pen(Color.FromArgb(90, 90, 90), 0.8f))
             { g.DrawLine(pen, width - 12, height - 6, width - 6, height - 12); g.DrawLine(pen, width - 8, height - 6, width - 6, height - 8); }
         }
@@ -424,31 +640,7 @@ namespace CodexMonitor
             path.AddArc(rect.X, rect.Bottom - diameter, diameter, diameter, 90, 90); path.CloseFigure();
             return path;
         }
-        internal static Icon MakeIcon(int pixels = 32)
-        {
-            using (var bitmap = new Bitmap(pixels, pixels))
-            using (var g = Graphics.FromImage(bitmap))
-            {
-                g.SmoothingMode = SmoothingMode.AntiAlias;
-                g.Clear(Color.Transparent);
-                g.ScaleTransform(pixels / 32f, pixels / 32f);
-                using (var fill = new SolidBrush(Color.FromArgb(18, 18, 18)))
-                using (var path = Rounded(new RectangleF(0, 0, 32, 32), 7)) g.FillPath(fill, path);
-                DrawLogo(g, new RectangleF(5, 5, 22, 22), Color.White);
-                IntPtr handle = bitmap.GetHicon();
-                try { using (var icon = Icon.FromHandle(handle)) return (Icon)icon.Clone(); }
-                finally { DestroyIcon(handle); }
-            }
-        }
-        [DllImport("user32.dll")] static extern bool DestroyIcon(IntPtr handle);
-        static void DrawLogo(Graphics g, RectangleF bounds, Color color)
-        {
-            using (var pen = new Pen(color, bounds.Width * 4 / 22f) { StartCap = LineCap.Round, EndCap = LineCap.Round })
-            {
-                g.DrawArc(pen, bounds, -90, 280);
-                g.DrawLine(pen, bounds.X + bounds.Width / 2, bounds.Y + bounds.Height / 2, bounds.X + bounds.Width * 20 / 22f, bounds.Y + bounds.Height / 2);
-            }
-        }
+        internal static Icon MakeIcon(int pixels = 32) { return AppLogo.CreateIcon(pixels); }
         void KeepOnScreen()
         {
             var bounds = Screen.FromRectangle(Bounds).WorkingArea;
@@ -466,6 +658,10 @@ namespace CodexMonitor
         {
             exiting = true; clock.Stop(); watch.Stop(); poll.Stop();
             SavePreferences(); StopClient(); tray.Visible = false;
+            if (decision != null) decision.Close();
+            if (notificationPanel != null) notificationPanel.Close();
+            if (historyPanel != null) historyPanel.Close();
+            if (appearance != null) appearance.Close();
             base.OnFormClosing(e);
         }
         protected override void Dispose(bool disposing)

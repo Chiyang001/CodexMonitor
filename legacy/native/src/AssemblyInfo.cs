@@ -1,0 +1,7 @@
+using System.Reflection;
+
+[assembly: AssemblyTitle("Codex Quota Monitor")]
+[assembly: AssemblyDescription("Windows Codex quota decision assistant with budgets, forecasts and task activity")]
+[assembly: AssemblyProduct("Codex Quota Monitor")]
+[assembly: AssemblyVersion("1.2.0.0")]
+[assembly: AssemblyFileVersion("1.2.0.0")]

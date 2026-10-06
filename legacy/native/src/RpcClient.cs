@@ -26,7 +26,7 @@ namespace CodexMonitor
             process.Start();
             process.BeginErrorReadLine();
             Task reader = ReadLoopAsync();
-            await RequestAsync("initialize", new { clientInfo = new { name = "codex_quota_monitor", title = "Codex Quota Monitor", version = "1.0.0" } });
+            await RequestAsync("initialize", new { clientInfo = new { name = "codex_quota_monitor", title = "Codex Quota Monitor", version = "1.2.0" } });
             Send(new { method = "initialized", @params = new { } });
         }
         async Task ReadLoopAsync()

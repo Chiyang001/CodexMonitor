@@ -47,6 +47,38 @@ class Tests
             Check(window.Expired(now) && window.Remaining == 60 && QuotaSnapshot.Countdown(window, now) == "等待额度重置", "Reset expiry never fabricates refreshed quota");
             window.Reset = null;
             Check(QuotaSnapshot.Countdown(window, now) == "重置时间未知", "Missing timestamp handling");
+            var history = new UsageHistory();
+            var weeklyWindow = new QuotaWindow { Minutes = 10080, Used = 20, Reset = now.AddDays(4).ToUnixSeconds() };
+            history.Points.Add(new UsagePoint { Time = now.AddHours(-1).ToUnixSeconds(), Minutes = 10080, Reset = weeklyWindow.Reset, Used = 19 });
+            history.Points.Add(new UsagePoint { Time = now.ToUnixSeconds(), Minutes = 10080, Reset = weeklyWindow.Reset, Used = 20 });
+            var analysis = history.Analyze(weeklyWindow, now);
+            Check(analysis.Fast && Math.Abs(analysis.DailyRate.Value - 24) < 0.001 && analysis.Exhaustion < now.AddDays(4), "Predict depletion from rate versus remaining cycle, not fixed threshold");
+            Check(history.Analyze(weeklyWindow, now.AddSeconds(76)).DailyRate.HasValue, "History analysis uses caller time deterministically");
+            weeklyWindow.Reset = now.AddDays(7).ToUnixSeconds();
+            Check(!history.Analyze(weeklyWindow, now).DailyRate.HasValue, "Never combine different reset cycles");
+            var budgetNow = now.AddHours(12);
+            history.Points.Clear();
+            weeklyWindow.Reset = budgetNow.AddDays(4).ToUnixSeconds(); weeklyWindow.Used = 30;
+            history.Points.Add(new UsagePoint { Time = budgetNow.AddHours(-2).ToUnixSeconds(), Minutes = 10080, Reset = weeklyWindow.Reset, Used = 20 });
+            history.Points.Add(new UsagePoint { Time = budgetNow.ToUnixSeconds(), Minutes = 10080, Reset = weeklyWindow.Reset, Used = 30 });
+            analysis = history.Analyze(weeklyWindow, budgetNow);
+            Check(Math.Abs(analysis.Safe.Value - (80 / (4 + 2.0 / 24) - 10)) < 0.001, "Daily budget anchors initial balance before subtracting observed consumption once");
+            history.Points[1].Used = 15;
+            Check(!history.Analyze(weeklyWindow, budgetNow).DailyRate.HasValue && !history.Analyze(weeklyWindow, budgetNow).Safe.HasValue, "Corrections do not produce misleading pace or budget");
+            weeklyWindow.Reset = budgetNow.ToUnixSeconds();
+            Check(!history.Analyze(weeklyWindow, budgetNow).Safe.HasValue, "Expired quota has no safe budget");
+            var activity = new TaskActivity();
+            activity.ParseLine(@"{""timestamp"":""2026-10-04T10:00:00Z"",""type"":""event_msg"",""payload"":{""type"":""token_count"",""info"":{""total_token_usage"":{""total_tokens"":100}}}}");
+            activity.ParseLine(@"{""timestamp"":""2026-10-04T10:01:00Z"",""type"":""event_msg"",""payload"":{""type"":""task_started"",""turn_id"":""test-turn""}}");
+            activity.ParseLine(@"{""timestamp"":""2026-10-04T10:02:00Z"",""type"":""event_msg"",""payload"":{""type"":""token_count"",""info"":{""total_token_usage"":{""total_tokens"":250}}}}");
+            Check(activity.Id == "test-turn" && activity.Tokens == 150, "Task tokens are a delta from the previous cumulative count");
+            activity.Observe(plus);
+            plus.FiveHour.Used += 5; activity.Observe(plus);
+            Check(activity.FiveChange == 5, "Task quota changes start at the first observed sample");
+            activity.ParseLine(@"{""timestamp"":""2026-10-04T10:03:00Z"",""type"":""event_msg"",""payload"":{""type"":""task_complete""}}");
+            activity.Observe(plus); plus.FiveHour.Used += 10; activity.Observe(plus);
+            Check(activity.FiveChange == 5 && activity.State == "空闲", "Completed task quota stops accumulating later unrelated consumption");
+            plus.FiveHour.Used -= 15;
             Check(!CodexDiscovery.IsDesktopPath(@"C:\Users\me\AppData\Local\OpenAI\Codex\bin\abc\codex.exe"), "Ignore monitor's own CLI server");
             Check(CodexDiscovery.IsDesktopPath(@"C:\Program Files\WindowsApps\OpenAI.Codex_1_x64\app\ChatGPT.exe"), "Recognize current Windows desktop name");
             var size = new System.Drawing.Size(312, 183);
@@ -59,20 +91,18 @@ class Tests
             var restored = Json.Serializer.Deserialize<Preferences>(Json.Serializer.Serialize(saved));
             Check(restored.Width == 300 && restored.Height == 170, "Custom aspect ratio survives preferences round-trip");
             restored = Json.Serializer.Deserialize<Preferences>(@"{""X"":10,""Y"":10}");
-            Check(restored.Width == 208 && restored.Height == 122, "Previous settings receive default dimensions");
+            Check(restored.Width == 208 && restored.Height == 152, "Previous settings receive default dimensions with health footer");
             Check(restored.Theme == "mint" && MonitorTheme.Find("unknown").Id == "mint", "Old or unknown themes fall back safely");
             saved.Theme = "orbit";
             Check(Json.Serializer.Deserialize<Preferences>(Json.Serializer.Serialize(saved)).Theme == "orbit", "Selected theme survives preferences round-trip");
             using (var form = new MonitorForm(false, "unused-capture"))
             {
-                var themeMenu = (System.Windows.Forms.ToolStripMenuItem)form.ContextMenuStrip.Items[2];
+                Check(form.ContextMenuStrip.Items[2].Text == "设置" && form.ContextMenuStrip.Items[4].Text == "智能额度" && form.ContextMenuStrip.Items[5].Text == "通知与提醒" && form.ContextMenuStrip.Items[6].Text == "历史统计", "Compact menu routes appearance and three separate panels");
                 foreach (var theme in MonitorTheme.All)
                 {
                     form.SetTheme(theme.Id);
-                    int selected = 0;
-                    foreach (System.Windows.Forms.ToolStripMenuItem item in themeMenu.DropDownItems)
-                        if (item.Checked) { selected++; Check((string)item.Tag == theme.Id, "Theme selection matches menu checkmark"); }
-                    Check(selected == 1 && form.BackColor == theme.Background, "Exactly one theme selected and background applied");
+                    Check(form.ContextMenuStrip.ForeColor == theme.Text, "Menu text remains readable for every theme");
+                    Check(form.BackColor == theme.Background, "Selected theme background applied");
                     foreach (var dimensions in new[] { new System.Drawing.Size(176, 108), new System.Drawing.Size(208, 122), new System.Drawing.Size(500, 250), new System.Drawing.Size(208, 300) })
                     {
                         form.Size = dimensions;
@@ -86,7 +116,7 @@ class Tests
                     {
                         var examples = new[] { plus, pro, free, empty };
                         var names = new[] { "plus", "pro", "free", "empty" };
-                        form.Size = new System.Drawing.Size(416, 244);
+                        form.Size = new System.Drawing.Size(416, 304);
                         for (int i = 0; i < examples.Length; i++)
                         {
                             typeof(MonitorForm).GetField("snapshot", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).SetValue(form, examples[i]);
@@ -95,6 +125,71 @@ class Tests
                                 form.DrawToBitmap(bitmap, form.ClientRectangle);
                                 bitmap.Save(System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "artifacts", "preview-" + theme.Id + "-" + names[i] + ".png"));
                             }
+                        }
+                    }
+                }
+                var fixture = QuotaSnapshot.Parse(Parse(@"{""rateLimits"":{""planType"":""plus"",""primary"":{""usedPercent"":32,""windowDurationMins"":300},""secondary"":{""usedPercent"":14,""windowDurationMins"":10080}}}"));
+                fixture.FiveHour.Reset = DateTimeOffset.Now.AddHours(3).ToUnixSeconds();
+                fixture.Weekly.Reset = DateTimeOffset.Now.AddDays(5).ToUnixSeconds();
+                typeof(MonitorForm).GetField("snapshot", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).SetValue(form, fixture);
+                var decisionText = (string)typeof(MonitorForm).GetMethod("BuildDecision", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).Invoke(form, null);
+                Check(decisionText.Contains("数据不足") && decisionText.Contains("未来 24 小时额度时间轴") && decisionText.Contains("预计重置"), "Decision panel exposes known resets without fabricating usage forecasts");
+                int writes = 0;
+                var panelPreferences = new Preferences();
+                using (var settings = new AppearanceForm(panelPreferences, id => { panelPreferences.Theme = id; writes++; }, value => { panelPreferences.Opacity = value; writes++; }, percent => { panelPreferences.Width = 208 * percent / 100; writes++; }))
+                {
+                    settings.StartPosition = System.Windows.Forms.FormStartPosition.Manual; settings.Location = new System.Drawing.Point(-10000, -10000); settings.Show();
+                    var body = FindBody(settings);
+                    foreach (System.Windows.Forms.Control control in body.Controls)
+                        if (control is PanelButton && control.Text.StartsWith("星夜紫")) { ((PanelButton)control).PerformClick(); break; }
+                    Check(panelPreferences.Theme == "orbit" && writes == 1, "Theme card applies immediately through settings callback");
+                    if (args.Length > 0 && args[0] == "--render-previews") CapturePanel(settings, "settings-theme");
+                    ClickTab(settings, "透明度");
+                    foreach (System.Windows.Forms.Control control in body.Controls) if (control is SmoothSlider) ((SmoothSlider)control).Value = 80;
+                    Check(panelPreferences.Opacity == .8 && writes == 2, "Opacity slider applies and saves immediately");
+                    if (args.Length > 0 && args[0] == "--render-previews") CapturePanel(settings, "settings-opacity");
+                    ClickTab(settings, "窗口大小");
+                    foreach (System.Windows.Forms.Control control in body.Controls) if (control is PanelButton && control.Text == "125%") { ((PanelButton)control).PerformClick(); break; }
+                    Check(panelPreferences.Width == 260 && writes == 3, "Window preset applies through settings callback");
+                    if (args.Length > 0 && args[0] == "--render-previews") CapturePanel(settings, "settings-size");
+                }
+                using (var notifications = new DecisionForm("通知与提醒", panelPreferences, () => writes++))
+                {
+                    notifications.StartPosition = System.Windows.Forms.FormStartPosition.Manual; notifications.Location = new System.Drawing.Point(-10000, -10000); notifications.Show();
+                    var body = FindBody(notifications);
+                    foreach (System.Windows.Forms.Control control in body.Controls) if (control is PanelButton && control.Text == "重置前 30 分钟") { ((PanelButton)control).PerformClick(); break; }
+                    Check(panelPreferences.BeforeResetAlert && writes == 4, "Notification toggle persists the reminder preference");
+                    if (args.Length > 0 && args[0] == "--render-previews") CapturePanel(notifications, "notifications");
+                }
+                using (var historyPanel = new DecisionForm("历史统计", panelPreferences, delegate { }))
+                {
+                    historyPanel.UpdateContent(decisionText);
+                    foreach (var panelTheme in MonitorTheme.All)
+                    {
+                        form.SetTheme(panelTheme.Id); historyPanel.ApplyTheme();
+                        Check(historyPanel.BackColor == panelTheme.Background && FindBody(historyPanel).BackColor == panelTheme.Background, "Open panel updates to " + panelTheme.Id + " theme");
+                        if (args.Length > 0 && args[0] == "--render-previews") CapturePanel(historyPanel, "history-" + panelTheme.Id);
+                    }
+                    if (args.Length > 0 && args[0] == "--render-previews") { CapturePanel(historyPanel, "history-timeline"); ClickTab(historyPanel, "历史采样"); CapturePanel(historyPanel, "history-samples"); }
+                }
+                if (args.Length > 0 && args[0] == "--render-previews")
+                {
+                    form.ContextMenuStrip.Show(new System.Drawing.Point(-10000, -10000));
+                    System.Windows.Forms.Application.DoEvents();
+                    using (var bitmap = new System.Drawing.Bitmap(form.ContextMenuStrip.Width, form.ContextMenuStrip.Height))
+                    {
+                        form.ContextMenuStrip.DrawToBitmap(bitmap, new System.Drawing.Rectangle(0, 0, bitmap.Width, bitmap.Height));
+                        bitmap.Save(System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "artifacts", "preview-menu.png"));
+                    }
+                    form.ContextMenuStrip.Close();
+                    using (var panel = new DecisionForm())
+                    {
+                        panel.UpdateContent(decisionText);
+                        panel.Show(); System.Windows.Forms.Application.DoEvents();
+                        using (var bitmap = new System.Drawing.Bitmap(panel.Width, panel.Height))
+                        {
+                            panel.DrawToBitmap(bitmap, new System.Drawing.Rectangle(0, 0, panel.Width, panel.Height));
+                            bitmap.Save(System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "artifacts", "preview-decision.png"));
                         }
                     }
                 }
@@ -114,6 +209,25 @@ class Tests
             Console.WriteLine("PASS: " + checks + " checks"); return 0;
         }
         catch (Exception error) { Console.Error.WriteLine(error); return 1; }
+    }
+    static System.Windows.Forms.Panel FindBody(System.Windows.Forms.Form form)
+    {
+        foreach (System.Windows.Forms.Control control in form.Controls) if (control is System.Windows.Forms.Panel) return (System.Windows.Forms.Panel)control;
+        throw new Exception("Panel body missing");
+    }
+    static void ClickTab(System.Windows.Forms.Form form, string text)
+    {
+        foreach (System.Windows.Forms.Control control in form.Controls) if (control is PanelButton && control.Text == text) { ((PanelButton)control).PerformClick(); return; }
+        throw new Exception("Tab missing: " + text);
+    }
+    static void CapturePanel(System.Windows.Forms.Form panel, string name)
+    {
+        panel.Show(); System.Windows.Forms.Application.DoEvents();
+        using (var bitmap = new System.Drawing.Bitmap(panel.Width, panel.Height))
+        {
+            panel.DrawToBitmap(bitmap, new System.Drawing.Rectangle(0, 0, panel.Width, panel.Height));
+            bitmap.Save(System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "artifacts", "preview-" + name + ".png"));
+        }
     }
     static async Task RpcTests()
     {

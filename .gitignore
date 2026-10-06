@@ -1,3 +1,5 @@
 dist/
 artifacts/
 *.user
+node_modules/
+*.log

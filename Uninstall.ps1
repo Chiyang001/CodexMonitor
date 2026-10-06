@@ -1,16 +1,23 @@
 $ErrorActionPreference = 'Stop'
-$installDir = Join-Path $env:LOCALAPPDATA 'CodexMonitor'
-$executable = Join-Path $installDir 'CodexMonitor.exe'
-Get-Process -Name CodexMonitor -ErrorAction SilentlyContinue | ForEach-Object {
-    try { if ($_.Path -eq $executable) { Stop-Process -Id $_.Id } } catch { }
+$installDir = [IO.Path]::GetFullPath((Join-Path $env:LOCALAPPDATA 'CodexMonitor'))
+$appDir = [IO.Path]::GetFullPath((Join-Path $installDir 'app'))
+if (-not $appDir.StartsWith($installDir + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) { throw '卸载目录校验失败' }
+$binary = Join-Path $appDir 'CodexMonitor.exe'
+if (Test-Path -LiteralPath $binary) {
+    $running = Get-Process -Name CodexMonitor -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $binary }
+    if ($running) {
+        $quitProcess = Start-Process -FilePath $binary -ArgumentList '--quit' -WindowStyle Hidden -PassThru
+        if (-not $quitProcess.WaitForExit(10000)) { throw '退出请求未完成' }
+        foreach ($process in $running) { if (-not $process.WaitForExit(10000)) { throw '请先从菜单退出程序' } }
+    }
 }
 foreach ($location in @([Environment]::GetFolderPath('Desktop'), [Environment]::GetFolderPath('Programs'), [Environment]::GetFolderPath('Startup'))) {
-    $shortcutPath = Join-Path $location 'Codex Quota Monitor.lnk'
-    if (Test-Path -LiteralPath $shortcutPath) { Remove-Item -LiteralPath $shortcutPath -Force }
+    $shortcut = Join-Path $location 'Codex Quota Monitor.lnk'
+    if (Test-Path -LiteralPath $shortcut) { Remove-Item -LiteralPath $shortcut -Force }
 }
-# Delete only named files in our fixed installation directory; retain user preferences.
-foreach ($name in @('CodexMonitor.exe', 'README.md', 'Uninstall.ps1')) {
+if (Test-Path -LiteralPath $appDir) { Remove-Item -LiteralPath $appDir -Recurse -Force }
+foreach ($name in @('CodexMonitor.exe','README.md','Uninstall.ps1')) {
     $file = Join-Path $installDir $name
     if (Test-Path -LiteralPath $file) { Remove-Item -LiteralPath $file -Force }
 }
-Write-Host '已卸载额度悬浮窗并移除启动项。窗口位置设置已保留。'
+Write-Host '已卸载。窗口偏好与历史采样已保留。'

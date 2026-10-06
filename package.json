@@ -1,0 +1,31 @@
+{
+  "name": "codex-quota-monitor",
+  "version": "1.1.0",
+  "private": true,
+  "description": "Codex quota decision assistant for Windows",
+  "author": "炽阳001",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "assets": "node scripts/assets.cjs",
+    "test": "node --test tests/*.test.cjs",
+    "test:ui": "electron . --smoke-test",
+    "pack": "node scripts/sync-unpacked.cjs",
+    "pack:full": "npm run assets && electron-builder --win --dir",
+    "dist": "npm run assets && electron-builder --win portable"
+  },
+  "devDependencies": {
+    "electron": "44.5.1",
+    "electron-builder": "26.15.3",
+    "sharp": "0.35.5"
+  },
+  "build": {
+    "appId": "local.codex.quota.monitor",
+    "productName": "CodexMonitor",
+    "directories": { "output": "dist/electron" },
+    "files": ["electron/**/*", "ui/**/*", "assets/Logo-rounded.png", "assets/developer.png", "assets/CodexMonitor.ico", "package.json"],
+    "asar": true,
+    "win": { "icon": "assets/CodexMonitor.ico", "target": "portable", "signExecutable": false },
+    "portable": { "artifactName": "CodexMonitor-1.1.0-Windows.exe" }
+  }
+}
