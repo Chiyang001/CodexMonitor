@@ -340,6 +340,12 @@ body[data-view=menu]{padding:10px}
 @media(max-height:200px){.widget{padding-top:9px;padding-bottom:8px}.widget-quotas{gap:8px;padding-top:8px;margin-top:4px}.widget-quota .row b{font-size:20px}.widget-quota .progress{margin:5px 0 4px}.widget-footer{padding-top:6px;margin-top:7px}.widget-quota .countdown{font-size:8px}}
 
 #app{width:100%;height:100%}
+/* Clip the complete composited layer, including filters and outer shadows.
+   Keep the CSS edge antialiased inside the native window region. */
+body #app{clip-path:inset(0 round 24px)}
+body[data-view=widget] #app{clip-path:inset(0 round 18px)}
+body[data-view=menu] #app{clip-path:inset(0 round 17px)}
+.surface,.widget,.menu{box-shadow:inset 0 1px 0 var(--glass-highlight),inset 0 -1px 0 rgba(0,0,0,.08);filter:none}
 
 .card.timeline{padding:20px}
 /* Frosted surfaces use a stable tint; content stays on its own clear layer. */

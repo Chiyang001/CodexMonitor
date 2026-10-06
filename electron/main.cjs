@@ -30,6 +30,24 @@ function saveGeometry() {
     const { x, y } = window.getBounds(); storage.save({ x, y }).then(publish);
   }, 250);
 }
+// CSS rounds the content; also trim the native transparent window so its
+// rectangular composition boundary cannot leave a faint outline on Windows.
+function clipWindow(window, view) {
+  if (process.platform !== 'win32') return;
+  const { width, height } = window.getContentBounds();
+  const inset = view === 'widget' ? 0 : view === 'menu' ? 10 : 12;
+  const w = width - inset * 2, h = height - inset * 2;
+  const radius = Math.min(view === 'widget' ? 18 : view === 'menu' ? 17 : 24, w / 2, h / 2);
+  const rows = [];
+  for (let y = 0; y < h; y++) {
+    const dy = Math.max(0, radius - (y + .5), y + .5 - (h - radius));
+    const edge = Math.floor(radius - Math.sqrt(Math.max(0, radius * radius - dy * dy)));
+    const previous = rows[rows.length - 1];
+    if (previous && previous.x === inset + edge && previous.width === w - edge * 2) previous.height++;
+    else rows.push({ x: inset + edge, y: inset + y, width: w - edge * 2, height: 1 });
+  }
+  window.setShape(rows);
+}
 function open(view, visible = true) {
   let window = windows.get(view);
   if (window && !window.isDestroyed()) { if (visible) { view === 'widget' ? window.showInactive() : window.show(); if (view !== 'widget') window.focus(); } return window; }
@@ -42,6 +60,8 @@ function open(view, visible = true) {
     title: `Codex · ${view}`, icon, autoHideMenuBar: true,
     webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true, backgroundThrottling: !smoke } });
   windows.set(view, window);
+  clipWindow(window, view);
+  window.on('resize', () => clipWindow(window, view));
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   window.webContents.on('will-navigate', event => event.preventDefault());
   window.webContents.on('context-menu', () => showMenu());

@@ -15,5 +15,5 @@ try {
     }
     & npm run dist
     if ($LASTEXITCODE -ne 0) { throw 'Electron 打包失败' }
-    Write-Host '已生成 dist\electron\CodexMonitor-1.1.0-Windows.exe 和 dist\electron\win-unpacked。'
+    Write-Host '已生成 dist\electron\CodexMonitor-1.1.1-Windows.exe 和 dist\electron\win-unpacked。'
 } finally { Pop-Location }

@@ -4,9 +4,9 @@
 
 <p align="center">Codex 额度决策助手 · 看见余量，安排工作</p>
 
-<p align="center"><strong>v1.1.0</strong> · Windows x64 · 单文件便携版 · 开发者：炽阳001</p>
+<p align="center"><strong>v1.1.1</strong> · Windows x64 · 单文件便携版 · 开发者：炽阳001</p>
 
-<p align="center"><a href="https://github.com/Chiyang001/CodexMonitor/releases/download/v1.1.0/CodexMonitor-1.1.0-Windows.exe"><strong>下载 EXE</strong></a> · <a href="https://github.com/Chiyang001/CodexMonitor/releases">版本发布</a> · <a href="CHANGELOG.md">更新日志</a> · <a href="https://space.bilibili.com/404891612">B 站主页</a> · <a href="https://github.com/Chiyang001?tab=repositories">GitHub 主页</a></p>
+<p align="center"><a href="https://github.com/Chiyang001/CodexMonitor/releases/download/v1.1.1/CodexMonitor-1.1.1-Windows.exe"><strong>下载 EXE</strong></a> · <a href="https://github.com/Chiyang001/CodexMonitor/releases">版本发布</a> · <a href="CHANGELOG.md">更新日志</a> · <a href="https://space.bilibili.com/404891612">B 站主页</a> · <a href="https://github.com/Chiyang001?tab=repositories">GitHub 主页</a></p>
 
 ---
 
@@ -32,7 +32,7 @@
 ## 快速开始
 
 1. 本机安装 Codex，并登录 ChatGPT 账号。
-2. [下载 CodexMonitor-1.1.0-Windows.exe](https://github.com/Chiyang001/CodexMonitor/releases/download/v1.1.0/CodexMonitor-1.1.0-Windows.exe)。
+2. [下载 CodexMonitor-1.1.1-Windows.exe](https://github.com/Chiyang001/CodexMonitor/releases/download/v1.1.1/CodexMonitor-1.1.1-Windows.exe)。
 3. 双击 EXE 运行，在悬浮窗或托盘图标上右键打开菜单。
 
 便携版约 **96 MB**，自带 Electron 运行时，无需安装 Node.js。程序未进行代码签名，首次运行可能出现 Windows 提示。任务栏文字功能使用 Windows 自带的 .NET Framework。
@@ -89,7 +89,7 @@
 
 通过官方本机 `codex app-server` 读取额度，不发起模型请求。不保存账号明文、令牌、提示词或对话内容，历史数据仅保存在本机。
 
-设置保存在 `%LOCALAPPDATA%\CodexMonitor\settings.json`。数值历史按账号标识哈希隔离，最多保留八天。1.1.0 兼容旧版设置与 C# 历史格式。
+设置保存在 `%LOCALAPPDATA%\CodexMonitor\settings.json`。数值历史按账号标识哈希隔离，最多保留八天。1.1.1 兼容旧版设置与 C# 历史格式。
 
 > 预算与耗尽预测基于近期观测速率，不保证任务一定完成。历史不足、数据过期、额度修正或等待重置确认时会暂停相应预测。任务额度变化可能包含其他客户端或并发任务的消耗。
 
