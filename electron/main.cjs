@@ -48,15 +48,18 @@ function clipWindow(window, view) {
   }
   window.setShape(rows);
 }
+function keepWidgetOnTop(window) {
+  if (!window.isDestroyed()) window.setAlwaysOnTop(true, 'screen-saver');
+}
 function open(view, visible = true) {
   let window = windows.get(view);
-  if (window && !window.isDestroyed()) { if (visible) { view === 'widget' ? window.showInactive() : window.show(); if (view !== 'widget') window.focus(); } return window; }
+  if (window && !window.isDestroyed()) { if (visible) { if (view === 'widget') { keepWidgetOnTop(window); window.showInactive(); } else window.show(); if (view !== 'widget') window.focus(); } return window; }
   const widget = view === 'widget', menu = view === 'menu'; const area = screen.getPrimaryDisplay().workArea, prefs = storage.prefs;
   const width = widget ? prefs.width : menu ? 238 : Math.min(960, area.width - 48);
   const height = widget ? prefs.height : menu ? 390 : Math.min(688, area.height - 48);
   const bounds = widget ? fit({ width, height, x: prefs.x ?? area.x + area.width - width - 24, y: prefs.y ?? area.y + 74 }) : { width, height };
   window = new BrowserWindow({ ...bounds, frame: false, transparent: true, backgroundColor: '#00000000', resizable: false,
-    show: false, hasShadow: false, skipTaskbar: menu || widget, alwaysOnTop: widget ? prefs.pinned : menu,
+    show: false, hasShadow: false, skipTaskbar: menu || widget, alwaysOnTop: widget || menu,
     title: `Codex · ${view}`, icon, autoHideMenuBar: true,
     webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true, backgroundThrottling: !smoke } });
   windows.set(view, window);
@@ -67,7 +70,12 @@ function open(view, visible = true) {
   window.webContents.on('context-menu', () => showMenu());
   window.loadFile(ui, { query: { view } });
   window.once('ready-to-show', () => { if (visible && !window.isDestroyed()) widget ? window.showInactive() : window.show(); });
-  if (widget) window.on('move', saveGeometry);
+  if (widget) {
+    keepWidgetOnTop(window);
+    window.on('show', () => keepWidgetOnTop(window));
+    window.on('blur', () => keepWidgetOnTop(window));
+    window.on('move', saveGeometry);
+  }
   if (menu) window.on('blur', () => { if (!window.isDestroyed()) window.close(); });
   window.on('closed', () => { if (windows.get(view) === window) windows.delete(view); });
   return window;
@@ -154,7 +162,14 @@ async function smokeTest() {
       await window.webContents.executeJavaScript('window.__ready');
       await window.webContents.executeJavaScript("document.documentElement.classList.add('capture')");
       window.setPosition(-10000, -10000); window.showInactive();
-      if (view === 'widget') window.setOpacity(1);
+      if (view === 'widget') {
+        window.setOpacity(1);
+        if (!window.isAlwaysOnTop()) throw new Error('Widget is not always on top');
+        window.hide(); window.setAlwaysOnTop(false); open('widget');
+        if (!window.isAlwaysOnTop()) throw new Error('Restored widget lost always-on-top');
+        window.setAlwaysOnTop(false); window.emit('blur');
+        if (!window.isAlwaysOnTop()) throw new Error('Unfocused widget lost always-on-top');
+      }
       await window.webContents.executeJavaScript('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
       await new Promise(resolve => setTimeout(resolve, 180));
       const check = await window.webContents.executeJavaScript(`({ count: document.querySelectorAll('button').length, view: document.body.dataset.view, text: document.body.textContent, overflow: document.documentElement.scrollWidth > innerWidth })`);

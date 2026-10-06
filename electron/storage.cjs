@@ -13,6 +13,7 @@ function normalize(value = {}) {
   for (const [key, min, max] of [['taskbarFontSize', 10, 24], ['taskbarOffset', 0, 2000], ['width', 248, 580], ['height', 188, 440]]) prefs[key] = Number.isFinite(prefs[key]) ? Math.max(min, Math.min(max, prefs[key])) : DEFAULTS[key];
   for (const key of ['x', 'y']) if (!Number.isFinite(prefs[key]) || prefs[key] === -1) prefs[key] = null;
   for (const key of ['taskbarDark', 'showInTaskbar', 'translucent', 'pinned', 'resetAlert', 'beforeResetAlert', 'lowAlert', 'paceAlert']) if (typeof prefs[key] !== 'boolean') prefs[key] = DEFAULTS[key];
+  prefs.pinned = true; // The widget always stays above other application windows.
   return prefs;
 }
 class Storage {

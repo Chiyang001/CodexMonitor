@@ -44,7 +44,7 @@ test('Zero consumption has no finite exhaustion estimate', () => {
 test('Legacy preferences migrate and invalid settings are bounded', () => {
   assert.equal(normalize().showInTaskbar,false); assert.equal(normalize({showInTaskbar:true}).showInTaskbar,true); assert.equal(normalize({showInTaskbar:1}).showInTaskbar,false); assert.equal(normalize().translucent,false); assert.equal(normalize({translucent:false}).translucent,false); assert.equal(normalize({translucent:'false'}).translucent,false);
   const prefs=normalize({ Theme:'orbit',Opacity:.8,Width:300,Height:200,X:-1,Pinned:false,ResetAlert:false });
-  assert.equal(prefs.theme,'orbit'); assert.equal(prefs.dashboardStyle,'bars'); assert.equal(prefs.x,null); assert.equal(prefs.pinned,false); assert.equal(prefs.resetAlert,false);
+  assert.equal(prefs.theme,'orbit'); assert.equal(prefs.dashboardStyle,'bars'); assert.equal(prefs.x,null); assert.equal(prefs.pinned,true); assert.equal(prefs.resetAlert,false);
   assert.equal(normalize({theme:'bad',opacity:NaN,width:0,height:Infinity}).theme,'mint'); assert.equal(normalize({dashboardStyle:'bad'}).dashboardStyle,'bars'); assert.equal(normalize({dashboardStyle:'rings'}).dashboardStyle,'rings');
 });
 test('Account-isolated persistence migrates C# points and survives restart', async () => {
