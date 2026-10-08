@@ -4,9 +4,9 @@
 
 <p align="center">Codex 额度决策助手 · 看见余量，安排工作</p>
 
-<p align="center"><strong>v1.1.1</strong> · Windows x64 · 单文件便携版 · 开发者：炽阳001</p>
+<p align="center"><strong>v1.1.2</strong> · Windows x64 · 单文件便携版 · 开发者：炽阳001</p>
 
-<p align="center"><a href="https://github.com/Chiyang001/CodexMonitor/releases/download/v1.1.1/CodexMonitor-1.1.1-Windows.exe"><strong>下载 EXE</strong></a> · <a href="https://github.com/Chiyang001/CodexMonitor/releases">版本发布</a> · <a href="CHANGELOG.md">更新日志</a> · <a href="https://space.bilibili.com/404891612">B 站主页</a> · <a href="https://github.com/Chiyang001?tab=repositories">GitHub 主页</a></p>
+<p align="center"><a href="https://github.com/Chiyang001/CodexMonitor/releases/download/v1.1.2/CodexMonitor-1.1.2-Windows.exe"><strong>下载 EXE</strong></a> · <a href="https://github.com/Chiyang001/CodexMonitor/releases">版本发布</a> · <a href="CHANGELOG.md">更新日志</a> · <a href="https://space.bilibili.com/404891612">B 站主页</a> · <a href="https://github.com/Chiyang001?tab=repositories">GitHub 主页</a></p>
 
 ---
 
@@ -32,12 +32,12 @@
 ## 快速开始
 
 1. 本机安装 Codex，并登录 ChatGPT 账号。
-2. [下载 CodexMonitor-1.1.1-Windows.exe](https://github.com/Chiyang001/CodexMonitor/releases/download/v1.1.1/CodexMonitor-1.1.1-Windows.exe)。
+2. [下载 CodexMonitor-1.1.2-Windows.exe](https://github.com/Chiyang001/CodexMonitor/releases/download/v1.1.2/CodexMonitor-1.1.2-Windows.exe)。
 3. 双击 EXE 运行，在悬浮窗或托盘图标上右键打开菜单。
 
 便携版约 **96 MB**，自带 Electron 运行时，无需安装 Node.js。程序未进行代码签名，首次运行可能出现 Windows 提示。任务栏文字功能使用 Windows 自带的 .NET Framework。
 
-程序手动启动，不添加开机自启动。Codex 启动后显示悬浮窗，退出后隐藏并关闭额度连接。再次运行会恢复已有实例。
+默认手动启动，可在 **设置 → 启动设置** 开启“开机自启动”，登录 Windows 后自动运行。默认在 Codex 启动后显示悬浮窗，关闭“启动时显示小窗口”后不会自动弹出，仍可从托盘菜单手动打开。Codex 退出后隐藏并关闭额度连接。再次运行会恢复已有实例。
 
 ## 能做什么
 
@@ -89,7 +89,7 @@
 
 通过官方本机 `codex app-server` 读取额度，不发起模型请求。不保存账号明文、令牌、提示词或对话内容，历史数据仅保存在本机。
 
-设置保存在 `%LOCALAPPDATA%\CodexMonitor\settings.json`。数值历史按账号标识哈希隔离，最多保留八天。1.1.1 兼容旧版设置与 C# 历史格式。
+设置保存在 `%LOCALAPPDATA%\CodexMonitor\settings.json`。数值历史按账号标识哈希隔离，最多保留八天。1.1.2 兼容旧版设置与 C# 历史格式。
 
 > 预算与耗尽预测基于近期观测速率，不保证任务一定完成。历史不足、数据过期、额度修正或等待重置确认时会暂停相应预测。任务额度变化可能包含其他客户端或并发任务的消耗。
 
@@ -127,7 +127,7 @@ npm start
 <details>
 <summary>目录安装与卸载</summary>
 
-开发构建后可运行 `Install.cmd`，将完整程序安装到 `%LOCALAPPDATA%\CodexMonitor\app`，并创建桌面和开始菜单快捷方式。安装不添加开机自启动，也不会自动运行程序。
+开发构建后可运行 `Install.cmd`，将完整程序安装到 `%LOCALAPPDATA%\CodexMonitor\app`，并创建桌面和开始菜单快捷方式。首次安装不添加开机自启动，也不会自动运行程序。可在设置面板开启。卸载会移除开机自启动项。
 
 先从菜单退出，再运行 `%LOCALAPPDATA%\CodexMonitor\Uninstall.ps1` 卸载。设置与数值历史保留，需要清除历史时可在退出后删除 `usage-*.json`。
 

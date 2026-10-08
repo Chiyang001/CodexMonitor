@@ -5,15 +5,16 @@ const os = require('node:os');
 const { Storage, DEFAULTS } = require('./storage.cjs');
 const { MonitorService } = require('./service.cjs');
 const { decision } = require('./quota.cjs');
+const { LoginStartup } = require('./startup.cjs');
 const { TaskbarHost } = require('./taskbar.cjs');
 const smoke = process.argv.includes('--smoke-test');
 const verify = process.argv.includes('--verify-live');
 app.setName('CodexMonitor'); app.setAppUserModelId('local.codex.quota.monitor');
 if (!smoke && !verify && !app.requestSingleInstanceLock()) app.quit();
-const windows = new Map(); let tray, storage, service, quitting = false, geometryTimer, taskbarHost;
+const windows = new Map(); let tray, storage, service, quitting = false, geometryTimer, taskbarHost, loginStartup, startupError = '';
 const icon = path.join(__dirname, '..', 'assets', 'Logo-rounded.png');
 const ui = path.join(__dirname, '..', 'ui', 'index.html');
-function state() { return { ...service.view(), taskbarError: taskbarHost?.error || '' }; }
+function state() { return { ...service.view(), taskbarError: taskbarHost?.error || '', startupError }; }
 function publish() {
   if (quitting) return;
   const value = state(); taskbarHost?.update(value); for (const window of windows.values()) if (!window.isDestroyed()) window.webContents.send('state', value);
@@ -91,7 +92,12 @@ function trusted(event) { return [...windows.values()].some(window => !window.is
 ipcMain.handle('state', event => { if (!trusted(event)) throw new Error('Unknown window'); return state(); });
 ipcMain.handle('preferences', async (event, patch) => {
   if (!trusted(event) || !patch || typeof patch !== 'object') throw new Error('Invalid settings');
-  const safe = Object.fromEntries(Object.entries(patch).filter(([key]) => ['theme', 'dashboardStyle', 'translucent', 'showInTaskbar', 'taskbarOffset', 'taskbarDark', 'taskbarFontSize', 'taskbarLayout', 'width', 'height', 'resetAlert', 'beforeResetAlert', 'lowAlert', 'paceAlert'].includes(key)));
+  const safe = Object.fromEntries(Object.entries(patch).filter(([key]) => ['showWidgetOnStartup', 'autoStart', 'theme', 'dashboardStyle', 'translucent', 'showInTaskbar', 'taskbarOffset', 'taskbarDark', 'taskbarFontSize', 'taskbarLayout', 'width', 'height', 'resetAlert', 'beforeResetAlert', 'lowAlert', 'paceAlert'].includes(key)));
+  if ('autoStart' in safe) {
+    if (typeof safe.autoStart !== 'boolean') throw new Error('Invalid startup setting');
+    try { loginStartup.set(safe.autoStart); startupError = ''; }
+    catch (error) { startupError = '开机自启动设置失败：' + error.message; publish(); throw error; }
+  }
   const prefs = await storage.save(safe), widget = windows.get('widget');
   if (widget && !widget.isDestroyed() && ('width' in safe || 'height' in safe)) { widget.setBounds(fit({ ...widget.getBounds(), width: Math.round(prefs.width), height: Math.round(prefs.height) })); }
   publish(); return prefs;
@@ -129,12 +135,15 @@ app.on('before-quit', event => {
 app.whenReady().then(async () => {
   storage = new Storage(smoke ? path.join(os.tmpdir(), `CodexMonitor-smoke-${process.pid}`) : path.join(process.env.LOCALAPPDATA || app.getPath('userData'), 'CodexMonitor'));
   await storage.load();
+  loginStartup = new LoginStartup(app, { simulated: smoke || verify });
+  try { await storage.save({ autoStart: loginStartup.get() }); }
+  catch (error) { startupError = '无法读取开机自启动状态：' + error.message; }
   service = new MonitorService(storage, (title, body) => { if (Notification.isSupported()) new Notification({ title, body, icon }).show(); });
   taskbarHost = new TaskbarHost(path.join(storage.folder, 'native-taskbar'));
   taskbarHost.on('status', () => { if (!quitting) { const value = state(); for (const w of windows.values()) if (!w.isDestroyed()) w.webContents.send('state', value); } });
   taskbarHost.on('action', action => { if (action === 'menu') showMenu(); else if (action === 'settings') open('settings'); });
   service.on('update', publish);
-  service.on('desktop', running => { if (verify) return; const widget = windows.get('widget'); if (running) open('widget'); else widget?.hide(); });
+  service.on('desktop', running => { if (verify) return; const widget = windows.get('widget'); if (running) { if (storage.prefs.showWidgetOnStartup) open('widget'); } else widget?.hide(); });
   if (smoke) return smokeTest();
   if (verify) {
     await service.watch();
@@ -175,6 +184,22 @@ async function smokeTest() {
       const check = await window.webContents.executeJavaScript(`({ count: document.querySelectorAll('button').length, view: document.body.dataset.view, text: document.body.textContent, overflow: document.documentElement.scrollWidth > innerWidth })`);
       if (!check.count || check.view !== view || check.overflow) throw new Error(`Invalid ${view} render`);
       if (view === 'settings') {
+        await window.webContents.executeJavaScript("document.querySelector('[data-tab=startup]').click()");
+        for (const enabled of [false, true]) {
+          await window.webContents.executeJavaScript("document.querySelector('[data-toggle=showWidgetOnStartup]').click()");
+          await new Promise(resolve => setTimeout(resolve, 80));
+          if (storage.prefs.showWidgetOnStartup !== enabled) throw new Error('Widget startup setting did not save');
+          const widget = windows.get('widget'); widget.hide(); service.emit('desktop', true);
+          if (widget.isVisible() !== enabled) throw new Error('Desktop startup ignored widget preference');
+          open('widget'); if (!widget.isVisible()) throw new Error('Manual widget open failed');
+        }
+        for (const enabled of [true, false]) {
+          await window.webContents.executeJavaScript("document.querySelector('[data-toggle=autoStart]').click()");
+          await new Promise(resolve => setTimeout(resolve, 80));
+          if (storage.prefs.autoStart !== enabled || loginStartup.get() !== enabled) throw new Error('Login startup toggle failed');
+        }
+        await fs.writeFile(path.join(artifacts, 'electron-settings-startup.png'), (await window.webContents.capturePage()).toPNG());
+        console.log('PASS: Startup settings and manual widget opening (login registration simulated)');
         await window.webContents.executeJavaScript("document.querySelector('[data-tab=display]').click()");
         const taskbarWidget = windows.get('widget'), taskbarBounds = JSON.stringify(taskbarWidget.getBounds());
         for (const enabled of [true, false]) {
@@ -221,6 +246,7 @@ async function smokeTest() {
         }
         await storage.save({ theme: 'mint' }); publish();
         await window.webContents.executeJavaScript("document.querySelector('[data-tab=about]').click()");
+        await window.webContents.executeJavaScript("Promise.all(Array.from(document.images, image => image.decode().catch(() => {})))");
         const about = await window.webContents.executeJavaScript("({name:document.body.textContent.includes('炽阳001'),logo:document.querySelector('.developer-logo').complete && document.querySelector('.developer-logo').naturalWidth > 0})");
         if(!about.name || !about.logo) throw new Error('Developer information missing');
         const external = [], originalExternal = shell.openExternal;

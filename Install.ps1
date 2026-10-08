@@ -46,5 +46,5 @@ foreach ($location in @([Environment]::GetFolderPath('Desktop'), [Environment]::
 }
 $legacyStartup = Join-Path ([Environment]::GetFolderPath('Startup')) 'Codex Quota Monitor.lnk'
 if (Test-Path -LiteralPath $legacyStartup) { Remove-Item -LiteralPath $legacyStartup -Force }
-Write-Host 'Electron 版安装完成，设置与历史已保留。请从桌面或开始菜单手动启动，不会开机自启动。'
+Write-Host 'Electron 版安装完成，设置与历史已保留。请从桌面或开始菜单手动启动，可在设置中开启开机自启动。'
 Write-Host $installedBinary

@@ -8,6 +8,38 @@ const { Storage, normalize } = require('../electron/storage.cjs');
 const { Activity } = require('../electron/activity.cjs');
 const { RpcClient, isDesktop } = require('../electron/rpc.cjs');
 const now = new Date(2026, 9, 6, 12).getTime();
+test('Startup defaults, boolean validation and saved preferences survive restart', async () => {
+  assert.equal(normalize().showWidgetOnStartup, true);
+  assert.equal(normalize().autoStart, false);
+  assert.equal(normalize({ showWidgetOnStartup: 'false', autoStart: 1 }).showWidgetOnStartup, true);
+  assert.equal(normalize({ autoStart: 1 }).autoStart, false);
+  const folder = await fs.mkdtemp(path.join(os.tmpdir(), 'codex-startup-test-'));
+  try {
+    await new Storage(folder).save({ showWidgetOnStartup: false, autoStart: true, showInTaskbar: true });
+    const restarted = new Storage(folder); await restarted.load();
+    assert.equal(restarted.prefs.showWidgetOnStartup, false);
+    assert.equal(restarted.prefs.autoStart, true);
+    assert.equal(restarted.prefs.showInTaskbar, true);
+  } finally { await fs.rm(folder, { recursive: true, force: true }); }
+});
+test('Login startup uses stable executable paths and verifies Windows registration', () => {
+  const { LoginStartup } = require('../electron/startup.cjs');
+  let registered, enabled = false;
+  const app = { isPackaged: true, getAppPath: () => 'C:\\app',
+    getLoginItemSettings: () => ({ openAtLogin: enabled, executableWillLaunchAtLogin: enabled }),
+    setLoginItemSettings: value => { registered = value; enabled = value.openAtLogin; } };
+  const startup = new LoginStartup(app, { env: { PORTABLE_EXECUTABLE_FILE: 'C:\\便携 程序\\Monitor.exe' }, execPath: 'C:\\temp\\Monitor.exe' });
+  startup.set(true); assert.equal(startup.get(), true);
+  assert.equal(registered.path, 'C:\\便携 程序\\Monitor.exe'); assert.deepEqual(registered.args, []);
+  startup.set(false); assert.equal(startup.get(), false);
+  const installed = new LoginStartup(app, { env: {}, execPath: 'C:\\installed\\Monitor.exe' });
+  assert.equal(installed.options.path, 'C:\\installed\\Monitor.exe');
+  app.isPackaged = false;
+  const dev = new LoginStartup(app, { env: {} }); assert.equal(dev.options.args[0], '"C:\\app"');
+  app.setLoginItemSettings = () => {};
+  assert.throws(() => startup.set(true), /Windows/);
+  const simulated = new LoginStartup(app, { simulated: true }); simulated.set(true); assert.equal(simulated.get(), true);
+});
 test('Codex group, supported periods, fallback plan and clamped values', () => {
   const snapshot = parseQuota({ rateLimitsByLimitId: { codex: { primary: { usedPercent: 32, windowDurationMins: 300 }, secondary: { usedPercent: 120, windowDurationMins: 10080 } }, other: { primary: { usedPercent: 1 } } } }, 'plus', now);
   assert.equal(snapshot.plan, 'Plus'); assert.equal(snapshot.windows[0].remaining, 68); assert.equal(snapshot.windows[1].remaining, 0);

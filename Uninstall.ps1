@@ -15,6 +15,10 @@ foreach ($location in @([Environment]::GetFolderPath('Desktop'), [Environment]::
     $shortcut = Join-Path $location 'Codex Quota Monitor.lnk'
     if (Test-Path -LiteralPath $shortcut) { Remove-Item -LiteralPath $shortcut -Force }
 }
+$startupName = 'local.codex.quota.monitor'
+foreach ($registryPath in @('HKCU:\Software\Microsoft\Windows\CurrentVersion\Run', 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run')) {
+    if (Test-Path -LiteralPath $registryPath) { Remove-ItemProperty -LiteralPath $registryPath -Name $startupName -ErrorAction SilentlyContinue }
+}
 if (Test-Path -LiteralPath $appDir) { Remove-Item -LiteralPath $appDir -Recurse -Force }
 foreach ($name in @('CodexMonitor.exe','README.md','Uninstall.ps1')) {
     $file = Join-Path $installDir $name

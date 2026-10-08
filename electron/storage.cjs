@@ -1,18 +1,18 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const DEFAULTS = { theme: 'mint', dashboardStyle: 'bars', translucent: false, showInTaskbar: false, taskbarOffset: 340, taskbarDark: true, taskbarFontSize: 12, taskbarLayout: 'two', width: 290, height: 218, pinned: true, x: null, y: null, resetAlert: true, beforeResetAlert: false, lowAlert: false, paceAlert: true };
+const DEFAULTS = { theme: 'mint', dashboardStyle: 'bars', translucent: false, showInTaskbar: false, showWidgetOnStartup: true, autoStart: false, taskbarOffset: 340, taskbarDark: true, taskbarFontSize: 12, taskbarLayout: 'two', width: 290, height: 218, pinned: true, x: null, y: null, resetAlert: true, beforeResetAlert: false, lowAlert: false, paceAlert: true };
 function normalize(value = {}) {
   const pick = (key, old) => value[key] ?? value[old] ?? DEFAULTS[key];
   const prefs = { ...DEFAULTS };
-  for (const [key, old] of Object.entries({ theme: 'Theme', translucent: 'Translucent', showInTaskbar: 'ShowInTaskbar', taskbarOffset: 'TaskbarOffset', taskbarDark: 'TaskbarDark', taskbarFontSize: 'TaskbarFontSize', taskbarLayout: 'TaskbarLayout', dashboardStyle: 'DashboardStyle', width: 'Width', height: 'Height', pinned: 'Pinned', x: 'X', y: 'Y', resetAlert: 'ResetAlert', beforeResetAlert: 'BeforeResetAlert', lowAlert: 'LowAlert', paceAlert: 'PaceAlert' })) prefs[key] = pick(key, old);
+  for (const [key, old] of Object.entries({ theme: 'Theme', translucent: 'Translucent', showInTaskbar: 'ShowInTaskbar', showWidgetOnStartup: 'ShowWidgetOnStartup', autoStart: 'AutoStart', taskbarOffset: 'TaskbarOffset', taskbarDark: 'TaskbarDark', taskbarFontSize: 'TaskbarFontSize', taskbarLayout: 'TaskbarLayout', dashboardStyle: 'DashboardStyle', width: 'Width', height: 'Height', pinned: 'Pinned', x: 'X', y: 'Y', resetAlert: 'ResetAlert', beforeResetAlert: 'BeforeResetAlert', lowAlert: 'LowAlert', paceAlert: 'PaceAlert' })) prefs[key] = pick(key, old);
   if (value.width == null && value.Width === 208 && [122,152].includes(value.Height)) { prefs.width = DEFAULTS.width; prefs.height = DEFAULTS.height; }
   if (!["mint","paper","orbit","amber","ocean","rose","graphite","sage","peach","lavender"].includes(prefs.theme)) prefs.theme = 'mint';
   if (!['bars', 'rings', 'gauge', 'segments', 'numbers'].includes(prefs.dashboardStyle)) prefs.dashboardStyle = 'bars';
   if (!['one','two'].includes(prefs.taskbarLayout)) prefs.taskbarLayout = 'two';
   for (const [key, min, max] of [['taskbarFontSize', 10, 24], ['taskbarOffset', 0, 2000], ['width', 248, 580], ['height', 188, 440]]) prefs[key] = Number.isFinite(prefs[key]) ? Math.max(min, Math.min(max, prefs[key])) : DEFAULTS[key];
   for (const key of ['x', 'y']) if (!Number.isFinite(prefs[key]) || prefs[key] === -1) prefs[key] = null;
-  for (const key of ['taskbarDark', 'showInTaskbar', 'translucent', 'pinned', 'resetAlert', 'beforeResetAlert', 'lowAlert', 'paceAlert']) if (typeof prefs[key] !== 'boolean') prefs[key] = DEFAULTS[key];
+  for (const key of ['showWidgetOnStartup', 'autoStart', 'taskbarDark', 'showInTaskbar', 'translucent', 'pinned', 'resetAlert', 'beforeResetAlert', 'lowAlert', 'paceAlert']) if (typeof prefs[key] !== 'boolean') prefs[key] = DEFAULTS[key];
   prefs.pinned = true; // The widget always stays above other application windows.
   return prefs;
 }

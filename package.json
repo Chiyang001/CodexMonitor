@@ -1,6 +1,6 @@
 {
   "name": "codex-quota-monitor",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "private": true,
   "description": "Codex quota decision assistant for Windows",
   "author": "炽阳001",
@@ -26,6 +26,6 @@
     "files": ["electron/**/*", "ui/**/*", "assets/Logo-rounded.png", "assets/developer.png", "assets/CodexMonitor.ico", "package.json"],
     "asar": true,
     "win": { "icon": "assets/CodexMonitor.ico", "target": "portable", "signExecutable": false },
-    "portable": { "artifactName": "CodexMonitor-1.1.1-Windows.exe" }
+    "portable": { "artifactName": "CodexMonitor-1.1.2-Windows.exe" }
   }
 }
